@@ -1,0 +1,21 @@
+{
+    "name": "mvcris/base",
+    "description": "Framework base personalizado",
+    "type": "project",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Cristian Dealmonte"
+        }
+    ],
+    "autoload": {
+        "psr-4": {
+            "Infrastructure\\": "./infrastructure",
+            "Model\\": "./models",
+            "Controller\\": "./controllers",
+            "Service\\": "./services",
+            "Utils\\": "./utils"
+        }
+    },
+    "require": {}
+}

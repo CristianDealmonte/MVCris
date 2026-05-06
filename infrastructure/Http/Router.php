@@ -1,5 +1,5 @@
 <?php
-namespace Infrastructure;
+namespace Infrastructure\Http;
 
 /**
  * Core Router for the MVC Framework

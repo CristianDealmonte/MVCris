@@ -1,5 +1,5 @@
 <?php
-namespace Infrastructure;
+namespace Infrastructure\Http;
 
 class Request {
     public array $params = []; // Para los parámetros de la URL: /products/{id}

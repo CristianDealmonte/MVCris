@@ -1,5 +1,5 @@
 <?php
-namespace Infrastructure;
+namespace Infrastructure\Http;
 
 class Response {
     

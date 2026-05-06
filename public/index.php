@@ -1,7 +1,7 @@
 <?php
 require_once __DIR__ . '/../server.php';
 
-use Infrastructure\Router;
+use Infrastructure\Http\Router;
 use Controller\MainController;
 
 $router = new Router();

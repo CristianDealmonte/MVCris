@@ -11,6 +11,7 @@
     "autoload": {
         "psr-4": {
             "Infrastructure\\": "./infrastructure",
+            "Middleware\\": "./middlewares",
             "Model\\": "./models",
             "Controller\\": "./controllers",
             "Service\\": "./services",

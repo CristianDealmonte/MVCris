@@ -18,6 +18,7 @@ class ComposerStaticInit2ef2140d3127ead9674dbde41d89968a
         'M' =>
         array (
             'Model\\' => 6,
+            'Middleware\\' => 11,
         ),
         'I' =>
         array (
@@ -41,6 +42,10 @@ class ComposerStaticInit2ef2140d3127ead9674dbde41d89968a
         'Model\\' =>
         array (
             0 => __DIR__ . '/../..' . '/models',
+        ),
+        'Middleware\\' =>
+        array (
+            0 => __DIR__ . '/../..' . '/middlewares',
         ),
         'Infrastructure\\' =>
         array (

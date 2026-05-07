@@ -9,6 +9,7 @@ return array(
     'Utils\\' => array($baseDir . '/utils'),
     'Service\\' => array($baseDir . '/services'),
     'Model\\' => array($baseDir . '/models'),
+    'Middleware\\' => array($baseDir . '/middlewares'),
     'Infrastructure\\' => array($baseDir . '/infrastructure'),
     'Controller\\' => array($baseDir . '/controllers'),
 );

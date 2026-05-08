@@ -1,7 +1,7 @@
 <?php
 namespace Controller;
 
-use Utils\Dev;
+use Infrastructure\Exceptions\ForbiddenException;
 
 class MainController {
     public static function index($req, $res) {
@@ -9,17 +9,18 @@ class MainController {
         $idProducto = $req->params['id'];
         $idComment = $req->params['id_comment'];
 
-        $res->json(["mensaje" => "Buscando el producto con id: $idProducto con comentario $idComment"]);
+        return $res->json(["mensaje" => "Buscando el producto con id: $idProducto con comentario $idComment"]);
     }
 
     public static function perfil($req, $res) {
 
-        // $time = $req->execution_time;
+        if(!isset($req->user_ids)) {
+            throw new ForbiddenException('La peticion no contiene toda la info requerida');
+        }
+
+        $user = $req->user_ids;
         $time = 10;
-        $idUser = $req->user_id;
 
-        // Dev::debug($req);
-
-        $res->json(["mensaje" => "Visitando perfil del susuario $idUser. Tardo: $time"]);
+        $res->json(["mensaje" => "Visitando perfil del susuario $user. Tardo: $time"]);
     }
 }

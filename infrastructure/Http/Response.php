@@ -51,7 +51,7 @@ class Response {
      * @param string $view The view name (relative to the views directory).
      * @param array<string, mixed> $data Data to be passed to the view.
      * 
-     * @throws /LogicException If a response has already been sent.
+     * @throws \LogicException If a response has already been sent.
      */
     public function render(string $view, array $data = []) : void{
         if($this->sent) {

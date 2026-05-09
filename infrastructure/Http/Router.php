@@ -3,7 +3,6 @@ namespace Infrastructure\Http;
 
 use Infrastructure\Exceptions\ErrorHandler;
 
-
 /**
  * Core HTTP Router of the framework.
  *
@@ -17,7 +16,6 @@ use Infrastructure\Exceptions\ErrorHandler;
  * The Router acts as the main request coordinator (HTTP kernel)
  * and guarantees that each request results in exactly ONE response.
 */
-
 class Router {
     /**
      * Registered routes grouped by HTTP method.

@@ -1,26 +1,32 @@
 <?php
 namespace Infrastructure;
 
+use mysqli;
+
 class ActiveRecord {
     // =============== DATABASE ===============
     protected static $connections = [];
     protected static $db = 'default';
     protected static $table = '';
     protected static $colsDB = [];
+    protected static $primaryKey = 'id';
 
     // Registrar la conexión a la base de datos
-    public static function setDB($name, $database) {
+    public static function setDB(string $name, mysqli $database) : void {
         self::$connections[$name] = $database;
     }
 
-    public static function getDB($name) {
+    public static function getDB(string $name) {
         return self::$connections[$name] ?? null;
     }
 
 
     // ================= CRUD =================
     public function save() {
-        $this->id ? $this->update() : $this->create();
+        $pk = static::$primaryKey;
+        return(isset($this->$pk) && !is_null($this->$pk)) 
+            ? $this->update() 
+            : $this->create();
     }
 
     public function create() {
@@ -32,23 +38,33 @@ class ActiveRecord {
         $query = "INSERT INTO " . static::$table . " ($cols) VALUES ($placeholders)";
         $params = array_values($atributes);
 
-        return static::executeSQL($query, $params);
+        $result = static::executeWrite($query, $params);
+        if($result) {
+            // Hidratamos el objeto con el ID recien creado en la DB
+            $db = self::getDB(static::$db);
+            $pk = static::$primaryKey;
+            $this->$pk = $db->insert_id;
+        }
+
+        return $result;
     }
 
     public function update() {
         $atributes = $this->getAtributes();
         $set = implode(', ', array_map(fn($col) => "$col = ?", array_keys($atributes)));
 
-        $query = "UPDATE " . static::$table . " SET $set WHERE id = ?";
+        $pk = static::$primaryKey;
+        $query = "UPDATE " . static::$table . " SET $set WHERE $pk = ?";
 
         $params = array_values($atributes);
-        $params[] = $this->id;
-        return  static::executeSQL($query, $params);
+        $params[] = $this->$pk;
+        return  static::executeWrite($query, $params);
     }
 
     public function delete() {
-        $query = "DELETE FROM " . static::$table . " WHERE id = ?";
-        return static::executeSQL($query, [$this->id], "i");
+        $pk = static::$primaryKey;
+        $query = "DELETE FROM " . static::$table . " WHERE $pk = ?";
+        return static::executeWrite($query, [$this->$pk], "i");
     }
 
     public static function get($filters = []) {
@@ -68,7 +84,7 @@ class ActiveRecord {
             }
             $query .= " WHERE " . implode(' AND ', $conditions);
         }
-        return static::executeSQL($query, $params);
+        return static::executeRead($query, $params);
     }
 
     public static function getOne($filters = []) {
@@ -78,12 +94,13 @@ class ActiveRecord {
 
     public static function getAll() {
         $query = "SELECT * FROM " . static::$table;
-        return static::executeSQL($query);
+        return static::executeRead($query);
     }
 
     public static function getById($id) {
-        $query = "SELECT * FROM " . static::$table . " WHERE id = ?";
-        $result = static::executeSQL($query, [$id], 'i');
+        $pk = static::$primaryKey;
+        $query = "SELECT * FROM " . static::$table . " WHERE $pk = ?";
+        $result = static::executeRead($query, [$id], 'i');
         return $result[0] ?? null;
     }
 
@@ -93,27 +110,54 @@ class ActiveRecord {
     // Return an array with the attributes of the objects, except the id
     public function getAtributes() {
         $atributes = [];
+        $pk = static::$primaryKey;
+
         foreach(static::$colsDB as $col) {
-            if($col === 'id') continue;
-            $atributes[$col] = $this->$col;
+            if($col === $pk) continue;
+            $atributes[$col] = $this->$col ?? null;
         }
         return $atributes;
     }
 
-    public static function executeSQL($query, $params = [], $types = '') {
-        $dbName = self::getDB(static::$db);
-        $stmt = $dbName->prepare($query);
-        if ($stmt === false) {
-            throw new \Exception("Error al preparar la consulta: " . $db->error);
+    protected static function executeRead(string $query, $params = [], $types = '') {
+        $stmt = self::prepareQuery($query, $params, $types);
+
+        $result = $stmt->get_result();
+        if($result === false && $stmt->errno) {
+            throw new \Exception("Error al obtener el resultado: " . $stmt->error);
+        }
+
+        $array = [];
+        if($result) {
+            while($row = $result->fetch_assoc()) {
+                $array[] = static::createObject($row);
+            }
+        }
+        $stmt->close();
+        return $array;
+    }
+
+    protected static function executeWrite(string $query, $params = [], $types = '') {
+        $stmt = self::prepareQuery($query, $params, $types);
+        $success = $stmt->affected_rows >= 0; // para UPDATEs que no cambian datos devuelve 0
+        $stmt->close();
+        return $success;
+    }
+
+    private static function prepareQuery(string $query, $params, $types) {
+        $db = self::getDB(static::$db);
+        $stmt = $db->prepare($query);
+
+        if($stmt === false) {
+            throw new \Exception("Error al preparar la consulta: " . $db->errpr);
         }
 
         if(!empty($params)) {
-            // si no se especifican los tipos, se infieren automáticamente
             if($types === '') {
                 foreach($params as $param) {
-                    if(is_int($param)) {
+                    if(is_int($param) || is_bool($param)) { // Los booleanos se guardan como tinyint
                         $types .= 'i';
-                    } elseif(is_double($param)) {
+                    } elseif(is_double($param) || is_float($param)) {
                         $types .= 'd';
                     } else {
                         $types .= 's';
@@ -124,25 +168,13 @@ class ActiveRecord {
             if (!$stmt->bind_param($types, ...$params)) {
                 throw new \Exception("Error al enlazar parámetros: " . $stmt->error);
             }
-        }
 
-        if (!$stmt->execute()) {
-            throw new \Exception("Error al ejecutar la consulta: " . $stmt->error);
-        }
-
-        $result = $stmt->get_result();
-        if ($result === false && $stmt->errno) {
-            throw new \Exception("Error al obtener el resultado: " . $stmt->error);
-        }
-        
-        $array = [];
-        if($result) {
-            while($row = $result->fetch_assoc()) {
-                $array[] = static::createObject($row);
+            if(!$stmt->execute()) {
+                throw new \Exception("Error al ejecutar la consulta: " . $stmt->error);
             }
+
+            return $stmt;
         }
-        $stmt->close();
-        return $array;
     }
 
     // Transform each row from the DB to an object

@@ -149,7 +149,7 @@ class ActiveRecord {
         $stmt = $db->prepare($query);
 
         if($stmt === false) {
-            throw new \Exception("Error al preparar la consulta: " . $db->errpr);
+            throw new \Exception("Error al preparar la consulta: " . $db->error);
         }
 
         if(!empty($params)) {

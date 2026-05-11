@@ -1,229 +1,265 @@
 <?php
-
 namespace Infrastructure;
 
+use RuntimeException;
+use InvalidArgumentException;
 use Infrastructure\Database\ConnectionInterface;
 use Infrastructure\Database\StatementInterface;
-use RuntimeException;
 
 /**
  * Base Active Record implementation.
- *
- * This abstract class provides basic CRUD functionality
- * for database-backed models using the Active Record pattern.
- *
- * It is completely decoupled from any specific database driver
- * and relies only on ConnectionInterface and StatementInterface.
+ * 
+ * Consumes the Database Abstraction Layer (DBAL) to provide
+ * object-oriented CRUD operations without tying the models 
+ * to a specific database driver. Features dynamic attributes
+ * and mass-assignment protection via $columns.
  */
-abstract class ActiveRecord
-{
-    /**
-     * Database connection used by all models.
-     *
-     * @var ConnectionInterface|null
-     */
-    protected static ?ConnectionInterface $connection = null;
-
-    /**
-     * Database table name.
-     *
-     * Must be defined by child classes.
-     *
-     * @var string
-     */
-    protected static string $table;
-
-    /**
-     * Primary key column.
-     *
-     * @var string
-     */
+class ActiveRecord {
+    // =============== DATABASE CONFIGURATION ===============
+    
+    /** @var array<string, ConnectionInterface> */
+    protected static array $connections = [];
+    protected static string $db = 'default';
+    
+    /** @var string The database table associated with the model. */
+    protected static string $table = '';
+    
+    /** @var string The primary key for the model. */
     protected static string $primaryKey = 'id';
 
     /**
-     * List of database columns.
-     *
-     * Must be defined by child classes.
-     *
-     * @var array<int, string>
+     * The attributes that are mass assignable.
+     * If empty, all attributes are allowed (unsafe).
+     * 
+     * @var array<string>
      */
     protected static array $columns = [];
 
     /**
-     * Assigns the database connection to the ActiveRecord system.
-     *
-     * This method should be called once during application bootstrap.
+     * The model's dynamic attributes mapping.
+     * 
+     * @var array<string, mixed>
      */
-    public static function setConnection(ConnectionInterface $connection): void
-    {
-        self::$connection = $connection;
+    protected array $attributes = [];
+
+    /**
+     * Injects a DBAL-compliant connection.
+     */
+    public static function setDB(string $name, ConnectionInterface $database): void {
+        self::$connections[$name] = $database;
+    }
+
+    public static function getDB(string $name): ?ConnectionInterface {
+        return self::$connections[$name] ?? null;
+    }
+
+    // ================= MAGIC METHODS =================
+
+    /**
+     * Initializes the model and hydrates attributes dynamically.
+     */
+    public function __construct(array $attributes = []) {
+        foreach ($attributes as $key => $value) {
+            $this->$key = $value; // This triggers __set() for validation
+        }
     }
 
     /**
-     * Persists the current model to the database.
-     *
-     * Performs INSERT or UPDATE depending on the presence
-     * of the primary key.
+     * Intercepts property assignment and validates against the $columns whitelist.
      */
-    public function save(): bool
-    {
+    public function __set(string $name, mixed $value): void {
+        // Validation against whitelist
+        if (!empty(static::$columns)) {
+            // Allow assignment ONLY if it's in the columns array OR if it's the primary key
+            if (!in_array($name, static::$columns) && $name !== static::$primaryKey) {
+                throw new InvalidArgumentException(
+                    "ORM Error: The property '{$name}' is not columns in model " . static::class
+                );
+            }
+        }
+
+        $this->attributes[$name] = $value;
+    }
+
+    /**
+     * Intercepts property reading for dynamic attributes.
+     */
+    public function __get(string $name): mixed {
+        return $this->attributes[$name] ?? null;
+    }
+
+    /**
+     * Allows the use of isset() or empty() on dynamic properties.
+     */
+    public function __isset(string $name): bool {
+        return isset($this->attributes[$name]);
+    }
+
+    // ================= CRUD OPERATIONS =================
+    
+    public function save(): bool {
         $pk = static::$primaryKey;
-
-        return isset($this->$pk)
-            ? $this->update()
-            : $this->insert();
+        // If the primary key exists and is not null, update. Otherwise, create.
+        return (isset($this->$pk) && !is_null($this->$pk)) ? $this->update() : $this->create();
     }
 
-    /**
-     * Inserts a new record into the database.
-     */
-    protected function insert(): bool
-    {
-        $attributes = $this->attributes();
+    public function create(): bool {
+        $dbAttributes = $this->getAttributesForDb();
 
-        $columns = implode(', ', array_keys($attributes));
-        $placeholders = implode(', ', array_fill(0, count($attributes), '?'));
+        $cols = join(', ', array_keys($dbAttributes));
+        $placeholders = implode(', ', array_fill(0, count($dbAttributes), '?'));
+        
+        $query = "INSERT INTO " . static::$table . " ($cols) VALUES ($placeholders)";
+        $params = array_values($dbAttributes);
 
-        $sql = "INSERT INTO " . static::$table .
-               " ($columns) VALUES ($placeholders)";
-
-        $stmt = $this->statement($sql, array_values($attributes));
-
-        return $stmt->affectedRows() >= 0;
+        return static::executeWrite($query, $params);
     }
 
-    /**
-     * Updates an existing database record.
-     */
-    protected function update(): bool
-    {
-        $attributes = $this->attributes();
+    public function update(): bool {
+        $dbAttributes = $this->getAttributesForDb();
+        $set = implode(', ', array_map(fn($col) => "$col = ?", array_keys($dbAttributes)));
+
         $pk = static::$primaryKey;
+        $query = "UPDATE " . static::$table . " SET $set WHERE $pk = ?";
 
-        $set = implode(', ', array_map(
-            fn ($col) => "$col = ?",
-            array_keys($attributes)
-        ));
-
-        $sql = "UPDATE " . static::$table .
-               " SET $set WHERE $pk = ?";
-
-        $params = array_values($attributes);
+        $params = array_values($dbAttributes);
         $params[] = $this->$pk;
-
-        $stmt = $this->statement($sql, $params);
-
-        return $stmt->affectedRows() >= 0;
+        
+        return static::executeWrite($query, $params);
     }
 
-    /**
-     * Deletes the current model from the database.
-     */
-    public function delete(): bool
-    {
+    public function delete(): bool {
         $pk = static::$primaryKey;
-
-        $sql = "DELETE FROM " . static::$table . " WHERE $pk = ?";
-        $stmt = $this->statement($sql, [$this->$pk]);
-
-        return $stmt->affectedRows() > 0;
+        $query = "DELETE FROM " . static::$table . " WHERE $pk = ?";
+        return static::executeWrite($query, [$this->$pk]);
     }
 
-    /**
-     * Retrieves all records.
-     *
-     * @return static[]
-     */
-    public static function all(): array
-    {
-        return static::query("SELECT * FROM " . static::$table);
+    public static function get(array $filters = []): array {
+        $query = "SELECT * FROM " . static::$table;
+        $params = [];
+
+        if(!empty($filters)) {
+            $conditions = [];
+            foreach($filters as $col => $value) {
+                if(is_array($value)) {
+                    $conditions[] = "$col {$value[0]} ?";
+                    $params[] = $value[1];
+                } else {
+                    $conditions[] = "$col = ?";
+                    $params[] = $value;
+                }
+            }
+            $query .= " WHERE " . implode(' AND ', $conditions);
+        }
+        return static::executeRead($query, $params);
     }
 
-    /**
-     * Finds a record by primary key.
-     */
-    public static function find(int|string $id): ?static
-    {
-        $pk = static::$primaryKey;
-        $results = static::query(
-            "SELECT * FROM " . static::$table . " WHERE $pk = ?",
-            [$id]
-        );
+    public static function getOne(array $filters = []): ?static {
+        $query = "SELECT * FROM " . static::$table;
+        $params = [];
 
+        if(!empty($filters)) {
+            $conditions = [];
+            foreach($filters as $col => $value) {
+                if(is_array($value)) {
+                    $conditions[] = "$col {$value[0]} ?";
+                    $params[] = $value[1];
+                } else {
+                    $conditions[] = "$col = ?";
+                    $params[] = $value;
+                }
+            }
+            $query .= " WHERE " . implode(' AND ', $conditions);
+        }
+        
+        $query .= " LIMIT 1"; 
+        $results = static::executeRead($query, $params);
+        
         return $results[0] ?? null;
     }
 
+    public static function getAll(): array {
+        $query = "SELECT * FROM " . static::$table;
+        return static::executeRead($query);
+    }
+
+    public static function getById(int|string $id): ?static {
+        $pk = static::$primaryKey;
+        $query = "SELECT * FROM " . static::$table . " WHERE $pk = ?";
+        $results = static::executeRead($query, [$id]);
+        return $results[0] ?? null;
+    }
+
+    // =============== INTERNAL HELPERS ===============
+
     /**
-     * Executes a SELECT query and hydrates results.
-     *
-     * @return static[]
+     * Returns the attributes ready for a DB insert/update, ignoring the primary key.
      */
-    protected static function query(string $sql, array $params = []): array
-    {
-        if (!self::$connection) {
-            throw new RuntimeException('Database connection not set.');
+    protected function getAttributesForDb(): array {
+        $attrs = $this->attributes;
+        $pk = static::$primaryKey;
+        
+        if (array_key_exists($pk, $attrs)) {
+            unset($attrs[$pk]);
         }
-
-        $stmt = self::$connection->prepare($sql);
-        $stmt->bind($params);
-        $stmt->execute();
-
-        $rows = $stmt->fetchAll();
-
-        return array_map(
-            fn ($row) => static::hydrate($row),
-            $rows
-        );
+        
+        return $attrs;
     }
 
     /**
-     * Creates a prepared statement and executes it.
+     * Internal helper to prepare the query, bind parameters, and execute via the DBAL.
      */
-    protected function statement(string $sql, array $params): StatementInterface
-    {
-        if (!self::$connection) {
-            throw new RuntimeException('Database connection not set.');
+    private static function prepareQuery(string $query, array $params): StatementInterface {
+        $conn = self::getDB(static::$db);
+        
+        if (!$conn) {
+            throw new RuntimeException("Database connection '" . static::$db . "' not found.");
         }
 
-        $stmt = self::$connection->prepare($sql);
-        $stmt->bind($params);
+        $stmt = $conn->prepare($query);
+        
+        if(!empty($params)) {
+            $stmt->bind($params);
+        }
+
         $stmt->execute();
 
         return $stmt;
     }
 
     /**
-     * Extracts model attributes for persistence.
+     * Executes SELECT queries and returns an array of hydrated model instances.
      */
-    protected function attributes(): array
-    {
-        $data = [];
-        $pk = static::$primaryKey;
-
-        foreach (static::$columns as $column) {
-            if ($column === $pk) {
-                continue;
-            }
-
-            $data[$column] = $this->$column ?? null;
+    protected static function executeRead(string $query, array $params = []): array {
+        $stmt = self::prepareQuery($query, $params);
+        
+        $rows = $stmt->fetchAll();
+        $array = [];
+        
+        foreach($rows as $row) {
+            $array[] = static::createObject($row);
         }
-
-        return $data;
+        
+        return $array;
     }
 
     /**
-     * Hydrates a model instance from database row data.
+     * Executes INSERT, UPDATE, DELETE queries.
      */
-    protected static function hydrate(array $row): static
-    {
-        $model = new static();
+    protected static function executeWrite(string $query, array $params = []): bool {
+        $stmt = self::prepareQuery($query, $params);
+        return $stmt->affectedRows() >= 0; 
+    }
 
-        foreach ($row as $key => $value) {
-            if (property_exists($model, $key)) {
-                $model->$key = $value;
-            }
-        }
-
-        return $model;
+    /**
+     * Maps an associative array from the database directly to an object instance
+     * bypassing the __set validation for performance and strictness.
+     */
+    public static function createObject(array $row): static {
+        $obj = new static();
+        // Llenamos el arreglo interno directamente. 
+        // Esto es un bypass seguro porque los datos vienen directamente de la DB, no del usuario.
+        $obj->attributes = $row; 
+        return $obj;
     }
 }

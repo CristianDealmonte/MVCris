@@ -2,14 +2,18 @@
 namespace Controller;
 
 use Infrastructure\Exceptions\ForbiddenException;
+use Model\User;
+use Utils\Dev;
 
 class MainController {
     public static function index($req, $res) {
 
-        $idProducto = $req->params['id'];
-        $idComment = $req->params['id_comment'];
+        $newUser = User::getById(1);
 
-        return $res->json(["mensaje" => "Buscando el producto con id: $idProducto con comentario $idComment"]);
+        $newUser->email = 'emailcorreo@correo.com';
+        $newUser->save();
+
+        return $res->json(['usuario' => $newUser->email]);
     }
 
     public static function perfil($req, $res) {

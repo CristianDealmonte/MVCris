@@ -38,7 +38,7 @@ class ErrorHandler {
      * @param Response $res The outgoing HTTP response.
      * @param Throwable $exception The thrown exception.
      * 
-     * @return void.
+     * @return void
     */
     public static function handleException(Request $req, Response $res, Throwable $exception) : void {
         /**
@@ -102,7 +102,7 @@ class ErrorHandler {
         /**
          * Render an HTML error page for browser clients.
          */
-        $res->render('errors/error', [
+        $res->render('errors/ErrorPage', [
             'statusCode' => $statusCode,
             'message' => $message
         ]);

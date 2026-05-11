@@ -21,7 +21,7 @@ interface StatementInterface {
      * 
      * @return bool
      */
-    public function excecute() : bool;
+    public function execute() : bool;
 
 
     /**

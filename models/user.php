@@ -3,17 +3,13 @@ namespace Model;
 
 use Infrastructure\ActiveRecord;
 
-class User extends ActiveRecord
-{
-    protected static string $table = 'users';
+class User extends ActiveRecord {
+    protected static string $table = 'usuarios';
 
     protected static array $columns = [
-        'id',
         'email',
-        'name'
+        'password'
     ];
-
-    public ?int $id;
 }
 
 

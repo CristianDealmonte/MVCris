@@ -1,6 +1,8 @@
 <?php
 namespace Infrastructure\Http;
 
+use Utils\Dev;
+
 /**
  * Represents the HTTP response sent back to the client.
  * 
@@ -64,11 +66,11 @@ class Response {
         
         // Capture the view output.
         ob_start();
-        include __DIR__ . "/../views/$view.php";
+        include __DIR__ . "/../../views/$view.php";
         $content = ob_get_clean();
 
         // Render the main layout (expects $content variable).
-        include __DIR__ . '/../views/layout/MainLayout.php';
+        include __DIR__ . '/../../views/layout/MainLayout.php';
     }
 
 

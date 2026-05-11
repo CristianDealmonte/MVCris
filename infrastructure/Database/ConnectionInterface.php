@@ -1,7 +1,7 @@
 <?php
-namespace Infraestructure\Database;
+namespace Infrastructure\Database;
 
-use Infraestructure\Database\StatementInterface;
+use Infrastructure\Database\StatementInterface;
 
 
 /**

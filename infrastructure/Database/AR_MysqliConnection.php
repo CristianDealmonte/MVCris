@@ -28,7 +28,7 @@ class AR_MysqliConnection implements ConnectionInterface {
      * This object represents an active connection to
      * a MySQL database using the mysqli driver.
      * 
-     * @var mysqli.
+     * @var mysqli
      */
     private mysqli $connection;
 

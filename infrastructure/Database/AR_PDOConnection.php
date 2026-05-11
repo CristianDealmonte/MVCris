@@ -38,14 +38,12 @@ class AR_PDOConnection implements ConnectionInterface
         $this->connection->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
     }
 
-    
+     
     /**
      * Prepares an SQL statement using PDO.
      *
      * @param string $sql The SQL query to prepare.
-     *
      * @return StatementInterface
-     *
      * @throws RuntimeException If the statement cannot be prepared.
      */
     public function prepare(string $sql): StatementInterface
@@ -56,10 +54,6 @@ class AR_PDOConnection implements ConnectionInterface
             throw new RuntimeException(
                 'Error preparing SQL (PDO): ' . $e->getMessage()
             );
-        }
-
-        if ($stmt === false) {
-            throw new RuntimeException('Error preparing SQL (PDO)');
         }
 
         return new AR_PDOStatement($stmt);

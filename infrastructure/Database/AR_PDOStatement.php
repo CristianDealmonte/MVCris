@@ -2,6 +2,8 @@
 
 namespace Infrastructure\Database;
 
+use PDO;
+use PDOException;
 use PDOStatement;
 use RuntimeException;
 
@@ -19,7 +21,7 @@ class AR_PDOStatement implements StatementInterface {
     private PDOStatement $stmt;
 
     /**
-     * Creates a new PDO statement wraper.
+     * Creates a new PDO statement wrapper.
      * 
      * @param PDOStatement $stmt
      */
@@ -28,15 +30,24 @@ class AR_PDOStatement implements StatementInterface {
     }
 
     /**
-     * Binds parameters to the statement.
+     * Binds parameters to the statement with strict typing.
      *
      * @param array<int|string, mixed> $params
      */
-    public function bind(array $params): void {
+    public function bind(array $params) : void {
         foreach ($params as $key => $value) {
+            // Inferencia de tipos nativos de PDO
+            $type = match (true) {
+                is_int($value) => PDO::PARAM_INT,
+                is_bool($value) => PDO::PARAM_BOOL,
+                is_null($value) => PDO::PARAM_NULL,
+                default => PDO::PARAM_STR,
+            };
+
             $this->stmt->bindValue(
                 is_int($key) ? $key + 1 : $key,
-                $value
+                $value,
+                $type
             );
         }
     }
@@ -45,13 +56,17 @@ class AR_PDOStatement implements StatementInterface {
      * Executes the statement.
      *
      * @return bool
+     * @throws RuntimeException If execution fails at the driver level.
      */
-    public function execute(): bool {
-        if (!$this->stmt->execute()) {
-            throw new RuntimeException('Error executing PDO statement');
+    public function execute() : bool {
+        try {
+            $this->stmt->execute();
+            return true;
+        } catch(PDOException $e) {
+            throw new RuntimeException(
+                'Error executing PDO statement: ' . $e->getMessage()
+            );
         }
-
-        return true;
     }
 
     /**
@@ -59,8 +74,8 @@ class AR_PDOStatement implements StatementInterface {
      *
      * @return array<int, array<string, mixed>>
      */
-    public function fetchAll(): array {
-        return $this->stmt->fetchAll(\PDO::FETCH_ASSOC);
+    public function fetchAll() : array {
+        return $this->stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
     /**
@@ -68,8 +83,8 @@ class AR_PDOStatement implements StatementInterface {
      *
      * @return array<string, mixed>|null
      */
-    public function fetchOne(): ?array {
-        $row = $this->stmt->fetch(\PDO::FETCH_ASSOC);
+    public function fetchOne() : ?array {
+        $row = $this->stmt->fetch(PDO::FETCH_ASSOC);
         return $row === false ? null : $row;
     }
 
@@ -78,7 +93,7 @@ class AR_PDOStatement implements StatementInterface {
      *
      * @return int
      */
-    public function affectedRows(): int {
+    public function affectedRows() : int {
         return $this->stmt->rowCount();
     }
 }
